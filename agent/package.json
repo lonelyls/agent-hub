@@ -1,0 +1,36 @@
+{
+  "name": "agent-hub-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone PTY client for Agent Hub",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "bin": {
+    "agent-hub": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test tests/protocol.test.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "node-pty": "1.1.0",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}

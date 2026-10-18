@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.tools/
+data/
+.env
+*.log
+test-results/
+*.tgz

@@ -1,0 +1,50 @@
+{
+  "name": "agent-hub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authenticated remote terminals for agent nodes",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"tsx watch server/index.ts --dev\" \"vite --host 127.0.0.1\"",
+    "build": "npm run build:agent && npm run build:server && npm run build:web",
+    "build:agent": "npm --prefix agent run build",
+    "build:server": "tsc -p tsconfig.build.json",
+    "build:web": "vite build",
+    "install:agent": "npm --prefix agent ci",
+    "pack:agent": "npm pack ./agent",
+    "typecheck": "tsc --noEmit && tsc -p web/tsconfig.json && npm --prefix agent run typecheck",
+    "start": "node dist/server/index.js",
+    "agent": "node agent/dist/index.js",
+    "user:add": "node dist/server/users-cli.js",
+    "test": "npm --prefix agent test && node --import tsx --test --test-concurrency=1 tests/auth.test.ts tests/hub.test.ts",
+    "test:e2e": "node --import tsx --test --test-concurrency=1 tests/e2e.test.ts",
+    "test:package": "node --import tsx --test --test-concurrency=1 tests/package.test.ts"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "express": "^5.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.0",
+    "concurrently": "^9.2.1",
+    "playwright": "^1.56.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

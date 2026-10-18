@@ -87,6 +87,7 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
   const [signingOut, setSigningOut] = useState(false);
   const active = sessions.find((session) => session.id === selected) ?? sessions[0];
   const online = sessions.filter((session) => session.status === 'online').length;
+  const insecureHttp = location.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
   const logout = async () => {
     setSigningOut(true);
     try { await api('/api/logout', {}); onLogout(); }
@@ -102,8 +103,8 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
         <nav aria-label="Agent terminals">
           {sessions.map((session) => (
             <button className={`session-button ${active?.id === session.id ? 'selected' : ''}`} key={session.id} onClick={() => setSelected(session.id)}>
-              <span className={`status-dot ${session.status}`} />
-              <span><strong>{session.name}</strong><small>{session.hostname} · {session.status}</small></span>
+              <span className={`status-dot ${connection === 'connected' ? session.status : 'disconnected'}`} />
+              <span><strong>{session.name}</strong><small>{session.hostname} · {connection === 'connected' ? session.status : 'status unknown'}</small></span>
               <span className="session-arrow" aria-hidden="true">&rsaquo;</span>
             </button>
           ))}
@@ -118,7 +119,7 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
       <main className="main-panel">
         <header className="page-heading">
           <div><span className="eyebrow">WORKSPACE / TERMINALS</span><h1>Agent terminals</h1><p>A direct line to your running agents.</p></div>
-          <span className="online-count"><span className="status-dot online" />{online} online</span>
+          <span className="online-count"><span className={`status-dot ${connection === 'connected' ? 'online' : 'disconnected'}`} />{connection === 'connected' ? `${online} online` : 'Status unknown'}</span>
         </header>
         {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Dismiss notification" onClick={() => setNotice('')}>&times;</button></div>}
         {active ? <Suspense fallback={<section className="empty-state">Loading terminal...</section>}><TerminalPane key={active.id} session={active} transport={transport} epoch={epoch} connected={connection === 'connected'} /></Suspense> : (
@@ -126,8 +127,9 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
             <div className="empty-icon" aria-hidden="true">&gt;_</div><span className="eyebrow">READY TO CONNECT</span>
             <h2>Your next terminal starts here.</h2>
             <p>Run the CLI wrapper on an agent node with this account.<br />Its live terminal will appear automatically.</p>
-            <pre>npm run agent -- --server {location.origin} --user {username} -- your-agent-command</pre>
-            <p className="empty-footnote">Run from the Agent Hub folder. Replace your-agent-command with a shell or agent CLI.<br />Passwords are prompted locally, never included in the command.</p>
+            <pre>agent-hub --server {location.origin}{insecureHttp ? ' --allow-insecure-http' : ''} --user {username} -- your-agent-command</pre>
+            <p className="empty-footnote">Install the standalone agent package on the agent node first; on Windows use agent-hub.cmd.<br />Replace your-agent-command with a shell or agent CLI. Passwords are prompted locally.</p>
+            {insecureHttp && <p className="empty-footnote">Trusted LAN only: HTTP sends passwords and terminal traffic without encryption. Use HTTPS on untrusted networks.</p>}
           </section>
         )}
       </main>

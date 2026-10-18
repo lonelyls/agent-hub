@@ -4,6 +4,27 @@ A small, self-hosted service for real remote agent terminals. Wrap a shell or ag
 
 **Stack:** TypeScript, Node.js, Express, WebSockets, node-pty, React, Vite, and xterm.js.
 
+## Project documentation
+
+- [Architecture](ARCHITECTURE.md): component boundaries, terminal and token-renewal flows, security, persistence, and deployment tradeoffs.
+- [AI coding-agent guide](AGENTS.md): repository navigation, commands, validation, and implementation invariants.
+- [Standalone agent guide](agent/README.md): portable client installation, packaging, and usage.
+- [Unraid deployment](deploy/UNRAID.md): Docker build, persistent appdata, and deployment to `192.168.68.155:3080`.
+
+## Docker
+
+The multi-stage `Dockerfile` builds only the hub service and web UI; native PTY clients remain on agent nodes. The runtime uses the non-root `node` user and includes an HTTP health check. `.dockerignore` allowlists application build inputs so local accounts, environment files, dependencies, and Git history are not sent to the builder.
+
+For local Docker with Compose:
+
+```text
+docker compose build
+docker compose run --rm hub node dist/server/users-cli.js alice
+docker compose up -d
+```
+
+Open **http://localhost:3080**. The local Compose configuration binds only loopback and persists users in a Docker-managed volume. For Unraid, use the [dedicated guide](deploy/UNRAID.md) and the standalone `compose.unraid.yaml`, or its Docker CLI instructions if Compose is unavailable. The Unraid configuration uses `/mnt/user/appdata/agent-hub/data` and the trusted-LAN origin `http://192.168.68.155:3080`. Account data must be writable by container UID/GID 1000; no default users are created.
+
 ## Quick start on this Windows machine
 
 The project is at `D:\Repos\agent-hub`. A checksum-verified Node.js 24 LTS runtime is already installed in `.tools` because Node.js was not on this machine's PATH. Activate it separately in each PowerShell terminal:
@@ -114,6 +135,8 @@ New users and password changes are read on subsequent login. **Restart the hub a
 Browser authentication uses an opaque, HttpOnly, SameSite=Strict cookie (also Secure when `HUB_PUBLIC_URL` is HTTPS). CLI login gets a separate agent-only bearer token, passed in the WebSocket Authorization header, not a URL. Both expire after 12 hours. The CLI proactively obtains a replacement one minute before expiry (at 80% of the remaining lifetime for short-lived tokens) and authenticates it on its existing WebSocket without interrupting the PTY. The hub accepts only an unexpired agent token belonging to the same user, then revokes the previous token. Temporary renewal failures are logged and retried; expiration falls back to reconnect/authentication. Update both hub and agent for this protocol support. Tokens are kept in process memory; the server stores only token hashes. Logout revokes that browser session and its sockets, not independent agent logins.
 
 Each account sees and controls **only its own terminals**. Different browser sessions signed in to the same account share the terminals. The first viewer gets control; other viewers are read-only and may explicitly **Take control**. Only the controlling browser can send input or resize the PTY. The original local terminal can still type independently.
+
+Browser displays follow the agent's applied PTY size, including resizes from the original local terminal. The controlling browser requests a viewport fit when its container changes, it takes control, or the agent reconnects; requests stay within 20-500 columns and 5-200 rows. Read-only viewers follow that shared size and scroll if it exceeds their viewport. While the browser is disconnected from the hub, retained terminal statuses are shown as unknown rather than live.
 
 Login failures are throttled by direct peer IP (10 failures per 15 minutes), and concurrent password derivations are bounded to protect server memory. Browser WebSockets and browser login/logout requests enforce same-origin checks. The server does not use `X-Forwarded-For` or `X-Forwarded-Host` to relax these checks.
 

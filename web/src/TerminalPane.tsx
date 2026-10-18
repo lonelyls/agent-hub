@@ -35,7 +35,6 @@ export function TerminalPane({ session, transport, epoch, connected }: Props) {
     terminal.loadAddon(fit);
     terminal.open(container.current!);
     terminalRef.current = terminal;
-    fit.fit();
     let hasSnapshot = false;
     let canControl = false;
     let online = false;
@@ -44,12 +43,13 @@ export function TerminalPane({ session, transport, epoch, connected }: Props) {
     setControlling(false);
     const resize = () => {
       if (!hasSnapshot || !canControl || !online || !connectedRef.current) return;
-      fit.fit();
-      transport.send({
-        type: 'resize',
-        cols: Math.max(20, Math.min(500, terminal.cols)),
-        rows: Math.max(5, Math.min(200, terminal.rows)),
-      });
+      const dimensions = fit.proposeDimensions();
+      if (!dimensions) return;
+      const cols = Math.max(20, Math.min(500, dimensions.cols));
+      const rows = Math.max(5, Math.min(200, dimensions.rows));
+      if (cols !== terminal.cols || rows !== terminal.rows) {
+        transport.send({ type: 'resize', cols, rows });
+      }
     };
     const unsubscribe = transport.subscribe((message) => {
       if (message.type === 'snapshot' && message.session.id === session.id) {
@@ -69,12 +69,14 @@ export function TerminalPane({ session, transport, epoch, connected }: Props) {
         terminal.write(message.data);
       } else if (message.type === 'state' && message.session.id === session.id) {
         const gainedControl = !canControl && message.controlling;
+        const becameOnline = !online && message.session.status === 'online';
         online = message.session.status === 'online';
         canControl = message.controlling;
         setInfo(message.session);
         setControlling(canControl);
-        if (!canControl) terminal.resize(message.session.cols, message.session.rows);
-        if (gainedControl) { resize(); terminal.focus(); }
+        terminal.resize(message.session.cols, message.session.rows);
+        if (gainedControl || becameOnline) resize();
+        if (gainedControl) terminal.focus();
       }
     });
     const input = terminal.onData((data) => {
@@ -109,7 +111,7 @@ export function TerminalPane({ session, transport, epoch, connected }: Props) {
     <section className="terminal-pane" aria-label={`Terminal ${session.name}`}>
       <div className="terminal-heading">
         <div className="terminal-title">
-          <span className={`status-dot ${info.status}`} />
+          <span className={`status-dot ${connected ? info.status : 'disconnected'}`} />
           <div><h2>{info.name}</h2><p>{info.hostname} <span>/</span> {info.command}</p></div>
         </div>
         <div className="terminal-actions">

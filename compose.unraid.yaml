@@ -1,0 +1,30 @@
+services:
+  hub:
+    image: agent-hub:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${HUB_BIND_ADDRESS:-192.168.68.155}:${HUB_EXTERNAL_PORT:-3080}:3000"
+    environment:
+      HUB_HOST: 0.0.0.0
+      HUB_PORT: "3000"
+      HUB_DATA_DIR: /app/data
+      HUB_PUBLIC_URL: "${HUB_PUBLIC_URL:-https://agenthub.phoenixlab.uk}"
+    volumes:
+      - type: bind
+        source: /mnt/user/appdata/agent-hub/data
+        target: /app/data
+        bind:
+          create_host_path: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

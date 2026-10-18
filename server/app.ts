@@ -84,6 +84,13 @@ export async function createHub(config: HubConfig) {
   });
   app.get('/api/me', (_request, response) => response.json({ username: response.locals.username as string }));
   app.get('/api/sessions', (_request, response) => response.json({ sessions: hub.list(response.locals.username as string) }));
+  app.post('/api/sessions/:id/remove', (request, response) => {
+    if (!allowOrigin(request)) { response.status(403).json({ error: 'Untrusted origin.' }); return; }
+    const result = hub.remove(response.locals.username as string, request.params.id);
+    if (result === 'not_found') { response.status(404).json({ error: 'Terminal not found.' }); return; }
+    if (result === 'online') { response.status(409).json({ error: 'Online terminals cannot be removed. Exit the child or stop the wrapper first.' }); return; }
+    response.json({ ok: true });
+  });
   app.use('/api', (_request, response) => response.status(404).json({ error: 'API endpoint not found.' }));
 
   if (existsSync(path.join(config.webDir, 'index.html'))) {

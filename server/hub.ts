@@ -63,6 +63,18 @@ export class Hub {
     return [...this.terminals.values()].filter((item) => item.owner === username).map((item) => ({ ...item.info }));
   }
 
+  remove(username: string, id: string): 'removed' | 'not_found' | 'online' {
+    const terminal = this.terminals.get(id);
+    if (!terminal || terminal.owner !== username) return 'not_found';
+    if (terminal.info.status === 'online') return 'online';
+    for (const peer of this.peers) {
+      if (peer.watching === id) peer.watching = undefined;
+    }
+    this.terminals.delete(id);
+    this.broadcastList(username);
+    return 'removed';
+  }
+
   revoke(token: string): void {
     for (const peer of this.peers) if (peer.token === token) peer.ws.close(4401, 'Signed out');
   }

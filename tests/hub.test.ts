@@ -4,6 +4,63 @@ import { once } from 'node:events';
 import { fixture, PASSWORD, register, rejectedSocket } from './helpers.js';
 import { HISTORY_BYTES, isRecord } from '../shared/protocol.js';
 
+test('removing inactive terminals enforces authentication, origin, ownership, and online protection', async (t) => {
+  const hub = await fixture(t);
+  const { token } = await hub.login('agent');
+  const { cookie } = await hub.login('browser');
+  const bob = await hub.login('browser', 'bob');
+  const agent = await hub.socket('agent', token);
+  register(agent);
+  const registered = await agent.next('registered');
+  const route = `/api/sessions/${String(registered.sessionId)}/remove`;
+  assert.equal((await hub.request(route, {})).status, 401);
+  assert.equal((await hub.request(route, {}, bob.cookie)).status, 404);
+  assert.equal((await hub.request(route, {}, cookie)).status, 409);
+  const headers = { Cookie: cookie, 'Content-Type': 'application/json' };
+  assert.equal((await fetch(`${hub.origin}${route}`, { method: 'POST', headers, body: '{}' })).status, 403);
+  assert.equal((await fetch(`${hub.origin}${route}`, {
+    method: 'POST', headers: { ...headers, Origin: 'https://attacker.example' }, body: '{}',
+  })).status, 403);
+
+  const viewer = await hub.socket('browser', cookie);
+  const observer = await hub.socket('browser', cookie);
+  for (const browser of [viewer, observer]) {
+    await browser.next('sessions');
+    browser.send({ type: 'watch', sessionId: registered.sessionId });
+    await browser.next('snapshot');
+  }
+  agent.send({ type: 'output', seq: 1, data: 'retained history' });
+  await agent.next('ack');
+  agent.ws.close();
+  await viewer.next('state', (message) => isRecord(message.session) && message.session.status === 'disconnected');
+  assert.equal((await hub.request(route, {}, bob.cookie)).status, 404);
+  assert.deepEqual(await (await hub.request(route, {}, cookie)).json(), { ok: true });
+  for (const browser of [viewer, observer]) {
+    await browser.next('sessions', (message) => Array.isArray(message.sessions) && message.sessions.length === 0);
+    browser.send({ type: 'input', data: 'not delivered' });
+    assert.equal((await browser.next('error')).code, 'not_watching');
+    browser.send({ type: 'watch', sessionId: registered.sessionId });
+    assert.equal((await browser.next('error')).code, 'not_found');
+  }
+  assert.deepEqual(hub.hub.list('alice'), []);
+  assert.equal((await hub.request(route, {}, cookie)).status, 404);
+
+  const resumed = await hub.socket('agent', token);
+  register(resumed, { sessionId: registered.sessionId, resumeToken: registered.resumeToken });
+  assert.equal((await resumed.next('error')).code, 'session_missing');
+  register(resumed);
+  const replacement = await resumed.next('registered');
+  assert.notEqual(replacement.sessionId, registered.sessionId);
+  viewer.send({ type: 'watch', sessionId: replacement.sessionId });
+  assert.equal((await viewer.next('snapshot')).history, '');
+  viewer.send({ type: 'input', data: 'still works\r' });
+  assert.equal((await resumed.next('input')).data, 'still works\r');
+  resumed.send({ type: 'exit', exitCode: 0 });
+  await viewer.next('state', (message) => isRecord(message.session) && message.session.status === 'exited');
+  assert.equal((await hub.request(`/api/sessions/${String(replacement.sessionId)}/remove`, {}, cookie)).status, 200);
+  assert.deepEqual(hub.hub.list('alice'), []);
+});
+
 test('login, cookies, logout, origin checks, and role separation protect terminal access', async (t) => {
   const hub = await fixture(t);
   assert.equal((await hub.request('/api/sessions')).status, 401);

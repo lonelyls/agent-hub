@@ -138,6 +138,8 @@ Each account sees and controls **only its own terminals**. Different browser ses
 
 Browser displays follow the agent's applied PTY size, including resizes from the original local terminal. The controlling browser requests a viewport fit when its container changes, it takes control, or the agent reconnects; requests stay within 20-500 columns and 5-200 rows. Read-only viewers follow that shared size and scroll if it exceeds their viewport. While the browser is disconnected from the hub, retained terminal statuses are shown as unknown rather than live.
 
+Select a disconnected or exited terminal and click **Remove session** to delete its retained entry and history for all browsers on your account. Online terminals cannot be removed. Removal does not kill a process on an offline node; if its wrapper reconnects, it registers the existing child as a new session without restoring the deleted history. Otherwise inactive entries expire automatically after 30 minutes.
+
 Login failures are throttled by direct peer IP (10 failures per 15 minutes), and concurrent password derivations are bounded to protect server memory. Browser WebSockets and browser login/logout requests enforce same-origin checks. The server does not use `X-Forwarded-For` or `X-Forwarded-Host` to relax these checks.
 
 For unattended client use, set `AGENT_HUB_PASSWORD` in the environment using your secret manager, not a command-line password flag. The wrapper strips it from the child environment. The user-management command also accepts this variable for automation. Clear it afterward:
@@ -177,6 +179,14 @@ Configure your own TLS certificate on that virtual host. Open `https://hub.examp
 ```text
 npm run agent -- --server https://hub.example.com --user alice -- your-agent-command
 ```
+
+For the deployed HTTPS hub, the Windows launch command is:
+
+```powershell
+agent-hub.cmd --server https://agenthub.phoenixlab.uk --user sheng --name devbox2 -- powershell.exe -NoLogo
+```
+
+The hub must use `HUB_PUBLIC_URL=https://agenthub.phoenixlab.uk`; open the dashboard through that same HTTPS origin. The dashboard's Windows launch example uses its current origin and signed-in username. Change `--name` for other nodes. HTTPS does not need `--allow-insecure-http`.
 
 The CLI refuses plain HTTP to non-loopback hosts unless `--allow-insecure-http` is explicitly supplied. For trusted-LAN experiments only:
 

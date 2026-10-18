@@ -97,6 +97,8 @@ Applied dimensions are authoritative for every browser, including the controller
 
 Closing a browser detaches its viewer without stopping the child. Exiting the child reports `exit`, transitions the terminal to `exited`, and propagates the child's exit code through the wrapper after output delivery. Stopping the wrapper stops its child; there is no facility to adopt a pre-existing terminal.
 
+An authenticated, same-origin browser may remove its own disconnected or exited terminal with `POST /api/sessions/:id/remove`. The hub rejects online terminals, clears all watchers of the removed entry, deletes its history and resume record, and broadcasts the updated account list. This does not terminate an offline child. A returning wrapper receives `session_missing` and registers its existing child under a new ID, just as after a hub restart.
+
 ### Proactive token renewal
 
 Tokens normally live for 12 hours. The client schedules renewal one minute before expiration, or after 80% of the remaining lifetime when less than five minutes remain.
@@ -135,6 +137,7 @@ A hub restart loses authentication sessions, terminal registrations, and output 
 | `POST /api/logout` | Same-origin browser logout; revokes its token and sockets. |
 | `GET /api/me` | Current browser identity; browser cookie required. |
 | `GET /api/sessions` | Account-owned terminal metadata; browser cookie required. |
+| `POST /api/sessions/:id/remove` | Remove an owned disconnected/exited terminal and history; browser cookie and allowed Origin required. |
 | `/ws/browser` | Authenticated browser events and controls; cookie and allowed Origin required. |
 | `/ws/agent` | Authenticated PTY transport; agent bearer token required. |
 

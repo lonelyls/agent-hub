@@ -9,9 +9,11 @@ interface Props {
   transport: HubTransport;
   epoch: number;
   connected: boolean;
+  onRemove: () => void;
+  removing: boolean;
 }
 
-export function TerminalPane({ session, transport, epoch, connected }: Props) {
+export function TerminalPane({ session, transport, epoch, connected, onRemove, removing }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const [info, setInfo] = useState(session);
   const [controlling, setControlling] = useState(false);
@@ -120,6 +122,9 @@ export function TerminalPane({ session, transport, epoch, connected }: Props) {
             <button className="secondary compact" onClick={() => transport.send({ type: 'control' })}>Take control</button>
           )}
           <button className="secondary compact" title="Clear only this browser's terminal display" onClick={() => terminalRef.current?.clear()}>Clear display</button>
+          {ready && info.status !== 'online' && (
+            <button className="secondary compact" disabled={!connected || removing} onClick={onRemove}>{removing ? 'Removing...' : 'Remove session'}</button>
+          )}
         </div>
       </div>
       <div className="terminal-surface" ref={container} data-testid="terminal" />

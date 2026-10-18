@@ -32,7 +32,7 @@ test('browser dimensions follow agent state, refit after agent reconnect, and ob
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('heading', { name: 'Agent terminals' }).waitFor();
-  assert.match(await page.locator('.empty-state pre').innerText(), /^agent-hub --server http:\/\/127\.0\.0\.1:\d+ --user alice -- your-agent-command$/);
+  assert.equal(await page.locator('.empty-state pre').innerText(), `agent-hub.cmd --server ${hub.origin} --user alice --name devbox2 -- powershell.exe -NoLogo`);
   const { token } = await hub.login('agent');
   const agent = await hub.socket('agent', token);
   register(agent);
@@ -100,19 +100,75 @@ test('empty-state commands use the standalone agent and require insecure HTTP on
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/me') {
-      await route.fulfill({ json: { username: 'alice' } });
+      await route.fulfill({ json: { username: 'sheng' } });
     } else {
       await route.fulfill({ response: await page.request.get(`${hub.origin}${url.pathname}${url.search}`) });
     }
   });
   await page.routeWebSocket('**/ws/browser', (route) => { route.close(); });
-  for (const origin of ['http://127.0.0.1:3000', 'http://localhost:3000', 'http://[::1]:3000', 'http://192.0.2.1:3080', 'https://hub.example.test']) {
+  for (const origin of ['http://127.0.0.1:3000', 'http://localhost:3000', 'http://[::1]:3000', 'http://192.0.2.1:3080', 'https://agenthub.phoenixlab.uk']) {
     await page.goto(origin);
     await page.getByRole('heading', { name: 'Your next terminal starts here.' }).waitFor();
     const insecure = origin === 'http://192.0.2.1:3080';
     assert.equal(await page.locator('.empty-state pre').innerText(),
-      `agent-hub --server ${origin}${insecure ? ' --allow-insecure-http' : ''} --user alice -- your-agent-command`);
+      `agent-hub.cmd --server ${origin}${insecure ? ' --allow-insecure-http' : ''} --user sheng --name devbox2 -- powershell.exe -NoLogo`);
     assert.equal(await page.getByText(/HTTP sends passwords and terminal traffic without encryption/).count(), insecure ? 1 : 0);
-    assert.match(await page.locator('.empty-state').innerText(), /on Windows use agent-hub\.cmd/);
+    assert.match(await page.locator('.empty-state').innerText(), /On Linux\/macOS use agent-hub/);
   }
+});
+
+test('disconnected and exited sessions can be removed across browsers without removing online sessions', { timeout: 30000 }, async (t) => {
+  const hub = await fixture(t, { webDir: path.resolve('dist/web') });
+  const browser = await chromium.launch({
+    ...(process.env.HUB_TEST_BROWSER_EXECUTABLE
+      ? { executablePath: process.env.HUB_TEST_BROWSER_EXECUTABLE }
+      : { channel: process.env.HUB_TEST_BROWSER_CHANNEL ?? 'chrome' }),
+    headless: true,
+  });
+  t.after(() => browser.close());
+  const context = await browser.newContext();
+  context.setDefaultTimeout(8000);
+  const page = await context.newPage();
+  await page.goto(hub.origin);
+  await page.getByLabel('Username', { exact: true }).fill('alice');
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const { token } = await hub.login('agent');
+  const agent = await hub.socket('agent', token);
+  register(agent, { name: 'Offline terminal' });
+  await agent.next('registered');
+  await page.getByText('You have control', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Remove session', exact: true }).count(), 0);
+  agent.ws.close();
+  await page.getByText('Agent offline', { exact: true }).waitFor();
+  const observer = await context.newPage();
+  await observer.goto(hub.origin);
+  await observer.getByText('Agent offline', { exact: true }).waitFor();
+
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('button', { name: 'Remove session', exact: true }).click();
+  assert.equal(hub.hub.list('alice').length, 1, 'Cancel must retain history and session.');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Remove session', exact: true }).click();
+  await page.getByRole('heading', { name: 'Your next terminal starts here.' }).waitFor();
+  await observer.getByRole('heading', { name: 'Your next terminal starts here.' }).waitFor();
+  assert.equal(hub.hub.list('alice').length, 0);
+  await page.reload();
+  await page.getByRole('heading', { name: 'Your next terminal starts here.' }).waitFor();
+
+  const exited = await hub.socket('agent', token);
+  register(exited, { name: 'Exited terminal' });
+  await exited.next('registered');
+  await page.getByRole('heading', { name: 'Exited terminal', exact: true }).waitFor();
+  exited.send({ type: 'exit', exitCode: 0 });
+  await page.getByText('Exited (0)', { exact: true }).waitFor();
+  const live = await hub.socket('agent', token);
+  register(live, { name: 'Still online' });
+  await live.next('registered');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Remove session', exact: true }).click();
+  await page.getByRole('heading', { name: 'Still online', exact: true }).waitFor();
+  await page.getByText(/^(You have control|Read only)$/).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Remove session', exact: true }).count(), 0);
+  assert.equal(hub.hub.list('alice').length, 1);
 });

@@ -2,6 +2,14 @@
 
 Target: **192.168.68.155**, using **http://192.168.68.155:3080** for an initial trusted-LAN deployment. Port 3080 avoids Unraid's management UI on ports 80/443. Agent CLI wrappers stay on the machines whose terminals you want to control.
 
+The deployed public address is **https://agenthub.phoenixlab.uk**. For that deployment, set `HUB_PUBLIC_URL=https://agenthub.phoenixlab.uk` (replacing the initial LAN value in the examples below), access the dashboard through HTTPS, and launch the Windows client with:
+
+```powershell
+agent-hub.cmd --server https://agenthub.phoenixlab.uk --user sheng --name devbox2 -- powershell.exe -NoLogo
+```
+
+Keep the backend HTTP port private to the trusted LAN/proxy; the client does not need `--allow-insecure-http` when using this HTTPS address.
+
 Plain HTTP exposes credentials and terminal traffic to the network. Use this only on a trusted LAN; for untrusted access, configure an HTTPS reverse proxy as described below. Do not port-forward 3080 to the internet.
 
 ## 1. Transfer the source bundle

@@ -85,6 +85,7 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
   const { sessions, connection, epoch, notice, setNotice, transport } = useHub(onExpired);
   const [selected, setSelected] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const active = sessions.find((session) => session.id === selected) ?? sessions[0];
   const online = sessions.filter((session) => session.status === 'online').length;
   const insecureHttp = location.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
@@ -93,6 +94,15 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
     try { await api('/api/logout', {}); onLogout(); }
     catch (error) { setNotice(error instanceof Error ? error.message : 'Sign out failed.'); }
     finally { setSigningOut(false); }
+  };
+  const remove = async () => {
+    if (!active || !window.confirm(`Remove "${active.name}" and its retained history? This does not stop a running process. An agent that reconnects will register again.`)) return;
+    setRemoving(true);
+    try {
+      await api(`/api/sessions/${encodeURIComponent(active.id)}/remove`, {});
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not remove the terminal.');
+    } finally { setRemoving(false); }
   };
   return (
     <div className="workspace">
@@ -122,13 +132,13 @@ function Dashboard({ username, onExpired, onLogout }: { username: string; onExpi
           <span className="online-count"><span className={`status-dot ${connection === 'connected' ? 'online' : 'disconnected'}`} />{connection === 'connected' ? `${online} online` : 'Status unknown'}</span>
         </header>
         {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Dismiss notification" onClick={() => setNotice('')}>&times;</button></div>}
-        {active ? <Suspense fallback={<section className="empty-state">Loading terminal...</section>}><TerminalPane key={active.id} session={active} transport={transport} epoch={epoch} connected={connection === 'connected'} /></Suspense> : (
+        {active ? <Suspense fallback={<section className="empty-state">Loading terminal...</section>}><TerminalPane key={active.id} session={active} transport={transport} epoch={epoch} connected={connection === 'connected'} onRemove={() => void remove()} removing={removing} /></Suspense> : (
           <section className="empty-state">
             <div className="empty-icon" aria-hidden="true">&gt;_</div><span className="eyebrow">READY TO CONNECT</span>
             <h2>Your next terminal starts here.</h2>
             <p>Run the CLI wrapper on an agent node with this account.<br />Its live terminal will appear automatically.</p>
-            <pre>agent-hub --server {location.origin}{insecureHttp ? ' --allow-insecure-http' : ''} --user {username} -- your-agent-command</pre>
-            <p className="empty-footnote">Install the standalone agent package on the agent node first; on Windows use agent-hub.cmd.<br />Replace your-agent-command with a shell or agent CLI. Passwords are prompted locally.</p>
+            <pre>agent-hub.cmd --server {location.origin}{insecureHttp ? ' --allow-insecure-http' : ''} --user {username} --name devbox2 -- powershell.exe -NoLogo</pre>
+            <p className="empty-footnote">Install the standalone agent package on the agent node first. Change devbox2 to your node name.<br />On Linux/macOS use agent-hub and replace powershell.exe -NoLogo with your shell or agent CLI. Passwords are prompted locally.</p>
             {insecureHttp && <p className="empty-footnote">Trusted LAN only: HTTP sends passwords and terminal traffic without encryption. Use HTTPS on untrusted networks.</p>}
           </section>
         )}
